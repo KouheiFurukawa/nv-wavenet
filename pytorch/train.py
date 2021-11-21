@@ -140,7 +140,7 @@ def train(num_gpus, rank, group_name, output_directory, epochs, learning_rate,
             if num_gpus > 1:
                 reduced_loss = reduce_tensor(loss.data, num_gpus)[0]
             else:
-                reduced_loss = loss.data[0]
+                reduced_loss = loss.data
             loss.backward()
             optimizer.step()
 

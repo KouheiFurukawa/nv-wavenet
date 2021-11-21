@@ -28,23 +28,21 @@ import os
 import torch
 import numpy as np
 from scipy.io.wavfile import read
+from glob import glob
 MAX_WAV_VALUE = 32768.0
 
 def load_wav_to_torch(full_path):
     """
     Loads wavdata into torch array
     """
-    sampling_rate, data = read(full_path)
+    sampling_rate, data = 16000, np.load(full_path)
     return torch.FloatTensor(data.astype(np.float32)), sampling_rate
 
 def files_to_list(filename):
     """
     Takes a text file of filenames and makes a list of filenames
     """
-    with open(filename, encoding='utf-8') as f:
-        files = f.readlines()
-
-    files = [f.rstrip() for f in files]
+    files = sorted(glob('/groups/1/gcc50521/furukawa/' + filename + '/*.npy'))
     return files
 
 def load_filepaths_and_text(filename, split="|"):
