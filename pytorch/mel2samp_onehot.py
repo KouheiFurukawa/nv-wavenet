@@ -63,8 +63,7 @@ class Mel2SampOnehot(torch.utils.data.Dataset):
         self.sampling_rate = sampling_rate
 
     def get_mel(self, audio):
-        audio_norm = audio / utils.MAX_WAV_VALUE
-        audio_norm = audio_norm.unsqueeze(0)
+        audio_norm = audio.unsqueeze(0)
         audio_norm = torch.autograd.Variable(audio_norm, requires_grad=False)
         melspec = self.stft.mel_spectrogram(audio_norm)
         melspec = torch.squeeze(melspec, 0)
