@@ -29,6 +29,7 @@ from scipy.io.wavfile import write
 import torch
 import nv_wavenet
 import utils
+from musicnet_utils import musicnet_label
 
 def chunker(seq, size):
     """
@@ -44,12 +45,16 @@ def main(mel_files, model_filename, output_dir, batch_size, implementation):
     
     for files in chunker(mel_files, batch_size):
         mels = []
+        labels = []
         for file_path in files:
             print(file_path)
             mel = torch.load(file_path)
             mel = utils.to_gpu(mel)
+            label = torch.tensor(musicnet_label(file_path))
+            label = utils.to_gpu(label)
             mels.append(torch.unsqueeze(mel, 0))
-        cond_input = model.get_cond_input(torch.cat(mels, 0))
+            labels.append(torch.unsqueeze(label, 0))
+        cond_input = model.get_cond_input(torch.cat(mels, 0), torch.cat(labels, 0))
         audio_data = wavenet.infer(cond_input, implementation)
 
         for i, file_path in enumerate(files):

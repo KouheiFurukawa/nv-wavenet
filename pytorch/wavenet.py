@@ -61,13 +61,15 @@ class WaveNet(torch.nn.Module):
                                                  n_cond_channels,
                                                  upsamp_window,
                                                  upsamp_stride)
-        
+
+        self.g_embed = torch.nn.Embedding(21, n_cond_channels)
         self.n_layers = n_layers
         self.max_dilation = max_dilation
         self.n_residual_channels = n_residual_channels 
         self.n_out_channels = n_out_channels
         self.cond_layers = Conv(n_cond_channels, 2*n_residual_channels*n_layers,
                                 w_init_gain='tanh')
+        self.global_layers = torch.nn.Linear(n_cond_channels, 2*n_residual_channels*n_layers)
         self.dilate_layers = torch.nn.ModuleList()
         self.res_layers = torch.nn.ModuleList()
         self.skip_layers = torch.nn.ModuleList()
@@ -101,21 +103,26 @@ class WaveNet(torch.nn.Module):
 
     def forward(self, forward_input):
         features = forward_input[0]
+        label = forward_input[2]
         forward_input = forward_input[1]
         cond_input = self.upsample(features)
+        global_input = self.global_layers(self.g_embed(label)).unsqueeze(-1)
+        global_input = global_input.expand(-1, -1, cond_input.size(-1))
 
         assert(cond_input.size(2) >= forward_input.size(1))
         if cond_input.size(2) > forward_input.size(1):
             cond_input = cond_input[:, :, :forward_input.size(1)]
+            global_input = global_input[:, :, :forward_input.size(1)]
        
         forward_input = self.embed(forward_input.long())
         forward_input = forward_input.transpose(1, 2)
        
         cond_acts = self.cond_layers(cond_input)
         cond_acts = cond_acts.view(cond_acts.size(0), self.n_layers, -1, cond_acts.size(2))
+        global_input = global_input.view(global_input.size(0), self.n_layers, -1, global_input.size(2))
         for i in range(self.n_layers):
             in_act = self.dilate_layers[i](forward_input)
-            in_act = in_act + cond_acts[:,i,:,:]
+            in_act = in_act + cond_acts[:,i,:,:] + global_input[:,i,:,:]
             t_act = torch.nn.functional.tanh(in_act[:, :self.n_residual_channels, :])
             s_act = torch.nn.functional.sigmoid(in_act[:, self.n_residual_channels:, :])
             acts = t_act * s_act
@@ -187,16 +194,24 @@ class WaveNet(torch.nn.Module):
     
         return model
 
-    def get_cond_input(self, features):
+    def get_cond_input(self, features, label):
         """
         Takes in features and gets the 2*R x batch x # layers x samples tensor
         """
         # TODO(rcosta): trim conv artifacts. mauybe pad spec to kernel multiple
         cond_input = self.upsample(features)
         time_cutoff = self.upsample.kernel_size[0] - self.upsample.stride[0]
+        global_input = self.global_layers(self.g_embed(label)).unsqueeze(-1)
+        global_input = global_input.expand(-1, -1, cond_input.size(-1))
+        global_input = global_input[:, :, :-time_cutoff]
         cond_input = cond_input[:, :, :-time_cutoff]
         cond_input = self.cond_layers(cond_input).data
         cond_input = cond_input.view(cond_input.size(0), self.n_layers, -1, cond_input.size(2))
         # This makes the data channels x batch x num_layers x samples
         cond_input = cond_input.permute(2,0,1,3)
-        return cond_input
+
+        # global conditioning
+        global_input = global_input.view(global_input.size(0), self.n_layers, -1, global_input.size(2))
+        global_input = global_input.permute(2,0,1,3)
+
+        return cond_input + global_input

@@ -36,6 +36,7 @@ import torch.utils.data
 import sys
 
 import utils
+from musicnet_utils import musicnet_label
 
 # We're using the audio processing from TacoTron2 to make sure it matches
 sys.path.insert(0, 'tacotron2')
@@ -73,6 +74,8 @@ class Mel2SampOnehot(torch.utils.data.Dataset):
         # Read audio
         filename = self.audio_files[index]
         audio, sampling_rate = utils.load_wav_to_torch(filename)
+        audio = torch.clamp(audio, -1., 1.)
+        label = torch.tensor(musicnet_label(filename))
         if sampling_rate != self.sampling_rate:
             raise ValueError("{} SR doesn't match target {} SR".format(
                 sampling_rate, self.sampling_rate))
@@ -86,8 +89,8 @@ class Mel2SampOnehot(torch.utils.data.Dataset):
             audio = torch.nn.functional.pad(audio, (0, self.segment_length - audio.size(0)), 'constant').data
 
         mel = self.get_mel(audio)
-        audio = utils.mu_law_encode(audio / utils.MAX_WAV_VALUE, self.mu_quantization)
-        return (mel, audio)
+        audio = utils.mu_law_encode(audio, self.mu_quantization)
+        return (mel, audio, label)
     
     def __len__(self):
         return len(self.audio_files)

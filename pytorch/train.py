@@ -131,10 +131,11 @@ def train(num_gpus, rank, group_name, output_directory, epochs, learning_rate,
         for i, batch in enumerate(train_loader):
             model.zero_grad()
             
-            x, y = batch
+            x, y, g = batch
             x = to_gpu(x).float()
             y = to_gpu(y)
-            x = (x, y)  # auto-regressive takes outputs as inputs
+            g = to_gpu(g)
+            x = (x, y, g)  # auto-regressive takes outputs as inputs
             y_pred = model(x)
             loss = criterion(y_pred, y)
             if num_gpus > 1:
