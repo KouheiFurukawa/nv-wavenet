@@ -1,6 +1,6 @@
 import pandas as pd
 
-csv_input = pd.read_csv(filepath_or_buffer='/groups/1/gcc50521/furukawa/musicnet_metadata.csv', sep=",")
+csv_input = pd.read_csv(filepath_or_buffer='/data/uni0/users/furukawa/musicnet_metadata.csv', sep=",")
 genre_to_id = {
     'Solo Piano': 0, 'String Quartet': 1, 'Accompanied Violin': 2, 'Piano Quartet': 3, 'Accompanied Cello': 4,
     'String Sextet': 5, 'Piano Trio': 6, 'Piano Quintet': 7, 'Wind Quintet': 8, 'Horn Piano Trio': 9, 'Wind Octet': 10,
