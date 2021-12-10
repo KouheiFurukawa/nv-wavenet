@@ -42,7 +42,7 @@ def files_to_list(filename):
     """
     Takes a text file of filenames and makes a list of filenames
     """
-    files = sorted(glob('/groups/1/gcc50521/furukawa/' + filename + '/*'))
+    files = sorted(glob('/data/uni0/users/furukawa/vqvae2/gen/mel_cond/*.npy'))
     return files
 
 def load_filepaths_and_text(filename, split="|"):

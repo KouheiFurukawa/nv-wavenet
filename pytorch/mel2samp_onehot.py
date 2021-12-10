@@ -31,12 +31,15 @@ import argparse
 import json
 import os
 import random
+
+import numpy as np
 import torch
 import torch.utils.data
 import sys
 
 import utils
 from musicnet_utils import musicnet_label
+from glob import glob
 
 # We're using the audio processing from TacoTron2 to make sure it matches
 sys.path.insert(0, 'tacotron2')
@@ -113,7 +116,7 @@ if __name__ == "__main__":
     
     args = parser.parse_args()
 
-    filepaths = utils.files_to_list(args.audio_list)
+    filepaths = glob('/data/uni0/users/furukawa/vqvae2/gen/mel_cond/*.npy')
     
     # Make directory if it doesn't exist
     if not os.path.isdir(args.output_dir):
@@ -128,11 +131,8 @@ if __name__ == "__main__":
     mel_factory = Mel2SampOnehot(**data_config)  
     
     for filepath in filepaths:
-        audio, sampling_rate = utils.load_wav_to_torch(filepath)
-        assert(sampling_rate == mel_factory.sampling_rate)
-        melspectrogram = mel_factory.get_mel(audio)
+        melspectrogram = torch.from_numpy(np.load(filepath))
         filename = os.path.basename(filepath)
         new_filepath = args.output_dir + '/' + filename + '.pt'
-        print(new_filepath)
         torch.save(melspectrogram, new_filepath)
 

@@ -25,6 +25,8 @@
 # 
 # *****************************************************************************
 import os
+
+import numpy as np
 from scipy.io.wavfile import write
 import torch
 import nv_wavenet
@@ -47,10 +49,9 @@ def main(mel_files, model_filename, output_dir, batch_size, implementation):
         mels = []
         labels = []
         for file_path in files:
-            print(file_path)
-            mel = torch.load(file_path)
+            mel = torch.from_numpy(np.load(file_path))
             mel = utils.to_gpu(mel)
-            label = torch.tensor(musicnet_label(file_path))
+            label = torch.tensor(0)
             label = utils.to_gpu(label)
             mels.append(torch.unsqueeze(mel, 0))
             labels.append(torch.unsqueeze(label, 0))
