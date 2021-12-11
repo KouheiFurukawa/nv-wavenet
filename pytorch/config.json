@@ -13,9 +13,9 @@
         "training_files": "musicnet_npy_10sec",
         "segment_length": 16000,
         "mu_quantization": 256,
-        "filter_length": 800,
-        "hop_length": 200,
-        "win_length": 800,
+        "filter_length": 1024,
+        "hop_length": 256,
+        "win_length": 1024,
         "sampling_rate": 16000
     },
 
@@ -33,6 +33,6 @@
         "n_out_channels": 256,
         "n_cond_channels": 80,
         "upsamp_window": 800,
-        "upsamp_stride": 200
+        "upsamp_stride": 256
     }
 }

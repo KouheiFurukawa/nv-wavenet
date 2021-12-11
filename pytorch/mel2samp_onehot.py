@@ -56,7 +56,8 @@ class Mel2SampOnehot(torch.utils.data.Dataset):
         self.stft = TacotronSTFT(filter_length=filter_length,
                                     hop_length=hop_length,
                                     win_length=win_length,
-                                    sampling_rate=sampling_rate)
+                                    sampling_rate=sampling_rate,
+                                    mel_fmin=0.0, mel_fmax=8000.0)
         
         self.segment_length = segment_length
         self.mu_quantization = mu_quantization
@@ -73,6 +74,7 @@ class Mel2SampOnehot(torch.utils.data.Dataset):
         # Read audio
         filename = self.audio_files[index]
         audio, sampling_rate = utils.load_wav_to_torch(filename)
+        audio = torch.clamp(audio, -1., 1.)
         if sampling_rate != self.sampling_rate:
             raise ValueError("{} SR doesn't match target {} SR".format(
                 sampling_rate, self.sampling_rate))
