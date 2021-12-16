@@ -62,7 +62,7 @@ class WaveNet(torch.nn.Module):
                                                  upsamp_window,
                                                  upsamp_stride)
 
-        self.g_embed = torch.nn.Embedding(21, n_cond_channels)
+        self.g_embed = torch.nn.Linear(n_cond_channels, n_cond_channels)
         self.n_layers = n_layers
         self.max_dilation = max_dilation
         self.n_residual_channels = n_residual_channels 

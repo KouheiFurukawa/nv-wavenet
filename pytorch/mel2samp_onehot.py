@@ -35,12 +35,22 @@ import torch
 import torch.utils.data
 import sys
 
+from torchaudio.transforms import MelSpectrogram
+
+from feature_extractor import DynamicEncoder, StaticEncoder
+
 import utils
-from musicnet_utils import musicnet_label
 
 # We're using the audio processing from TacoTron2 to make sure it matches
 sys.path.insert(0, 'tacotron2')
 from tacotron2.layers import TacotronSTFT
+
+class Encoder(torch.nn.Module):
+    def __init__(self):
+        super(Encoder, self).__init__()
+        self.enc_dynamic = DynamicEncoder(128)
+        self.enc_static = StaticEncoder('resnet50', out_dim=128)
+
 
 class Mel2SampOnehot(torch.utils.data.Dataset):
     """
@@ -54,14 +64,16 @@ class Mel2SampOnehot(torch.utils.data.Dataset):
         random.seed(1234)
         random.shuffle(self.audio_files)
         
-        self.stft = TacotronSTFT(filter_length=filter_length,
-                                    hop_length=hop_length,
-                                    win_length=win_length,
-                                    sampling_rate=sampling_rate)
+        self.stft = MelSpectrogram(n_fft=1024, win_length=1024, hop_length=256,
+                                   f_min=125, f_max=7600, n_mels=80, power=1, normalized=True)
         
         self.segment_length = segment_length
         self.mu_quantization = mu_quantization
         self.sampling_rate = sampling_rate
+        self.enc = Encoder()
+        state = torch.load('/data/unagi0/furukawa/musicnet/checkpoint_0300.pth.tar')['state_dict']
+        self.enc.load_state_dict(state, strict=False)
+        self.enc.eval()
 
     def get_mel(self, audio):
         audio_norm = audio.unsqueeze(0)
@@ -75,7 +87,9 @@ class Mel2SampOnehot(torch.utils.data.Dataset):
         filename = self.audio_files[index]
         audio, sampling_rate = utils.load_wav_to_torch(filename)
         audio = torch.clamp(audio, -1., 1.)
-        label = torch.tensor(musicnet_label(filename))
+        with torch.no_grad():
+            melspec = self.stft(audio[:81920])
+            label = self.enc.enc_static(melspec.view(1, 1, 80, -1)).squeeze()
         if sampling_rate != self.sampling_rate:
             raise ValueError("{} SR doesn't match target {} SR".format(
                 sampling_rate, self.sampling_rate))
@@ -88,8 +102,9 @@ class Mel2SampOnehot(torch.utils.data.Dataset):
         else:
             audio = torch.nn.functional.pad(audio, (0, self.segment_length - audio.size(0)), 'constant').data
 
-        mel = self.get_mel(audio)
-        audio = utils.mu_law_encode(audio, self.mu_quantization)
+        audio = utils.mu_law_encode(audio / utils.MAX_WAV_VALUE, self.mu_quantization)
+        with torch.no_grad():
+            mel = self.enc.enc_dynamic(audio.view(1, 1, -1).float()).squeeze()
         return (mel, audio, label)
     
     def __len__(self):
