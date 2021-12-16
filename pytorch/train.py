@@ -122,7 +122,7 @@ def train(num_gpus, rank, group_name, output_directory, epochs, learning_rate,
             os.makedirs(output_directory)
             os.chmod(output_directory, 0o775)
         print("output directory", output_directory)
-    
+    logfile = os.path.join(output_directory, 'log.txt')
     model.train()
     epoch_offset = max(0, int(iteration / len(train_loader)))
     # ================ MAIN TRAINNIG LOOP! ===================
@@ -146,6 +146,9 @@ def train(num_gpus, rank, group_name, output_directory, epochs, learning_rate,
             optimizer.step()
 
             print("{}:\t{:.9f}".format(iteration, reduced_loss))
+            with open(logfile, mode='a') as f:
+                if iteration % 10 == 0:
+                    f.write("\n{}:\t{:.9f}".format(iteration, reduced_loss))
 
             if (iteration % iters_per_checkpoint == 0):
                 if rank == 0:

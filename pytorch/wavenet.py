@@ -69,7 +69,7 @@ class WaveNet(torch.nn.Module):
         self.n_out_channels = n_out_channels
         self.cond_layers = Conv(n_cond_channels, 2*n_residual_channels*n_layers,
                                 w_init_gain='tanh')
-        self.global_layers = torch.nn.Linear(n_cond_channels, 2*n_residual_channels*n_layers)
+        self.global_layers = Conv(n_cond_channels, 2*n_residual_channels*n_layers)
         self.dilate_layers = torch.nn.ModuleList()
         self.res_layers = torch.nn.ModuleList()
         self.skip_layers = torch.nn.ModuleList()
@@ -106,7 +106,7 @@ class WaveNet(torch.nn.Module):
         label = forward_input[2]
         forward_input = forward_input[1]
         cond_input = self.upsample(features)
-        global_input = self.global_layers(self.g_embed(label)).unsqueeze(-1)
+        global_input = self.g_embed(label).unsqueeze(-1)
         global_input = global_input.expand(-1, -1, cond_input.size(-1))
 
         assert(cond_input.size(2) >= forward_input.size(1))
@@ -119,6 +119,7 @@ class WaveNet(torch.nn.Module):
        
         cond_acts = self.cond_layers(cond_input)
         cond_acts = cond_acts.view(cond_acts.size(0), self.n_layers, -1, cond_acts.size(2))
+        global_input = self.global_layers(global_input)
         global_input = global_input.view(global_input.size(0), self.n_layers, -1, global_input.size(2))
         for i in range(self.n_layers):
             in_act = self.dilate_layers[i](forward_input)

@@ -1,6 +1,6 @@
 {
     "train_config": {
-        "output_directory": "/groups/1/gcc50521/furukawa/wn_checkpoints",
+        "output_directory": "/data/unagi0/furukawa/wn_checkpoints/dynamic_static",
         "epochs": 100000,
         "learning_rate": 1e-3,
         "iters_per_checkpoint": 5000,
