@@ -24,8 +24,11 @@
 # 
 # *****************************************************************************
 import torch
-import wavenet
 import math
+from fairseq.models.wav2vec.wav2vec import ConvFeatureExtractionModel, Wav2VecConfig as cfg
+
+from vector_quantizer import Quantize
+
 
 class Conv(torch.nn.Module):
     """
@@ -56,6 +59,17 @@ class WaveNet(torch.nn.Module):
                  n_residual_channels, n_skip_channels, n_out_channels,
                  n_cond_channels, upsamp_window, upsamp_stride):
         super(WaveNet, self).__init__()
+        self.encoder = ConvFeatureExtractionModel(
+            conv_layers=eval(cfg.conv_feature_layers),
+            dropout=0.0,
+            log_compression=cfg.log_compression,
+            skip_connections=cfg.skip_connections_feat,
+            residual_scale=cfg.residual_scale,
+            non_affine_group_norm=cfg.non_affine_group_norm,
+            activation=torch.nn.ReLU(),
+        )
+        self.pre_vq_conv = torch.nn.Conv1d(128, 128, 1)
+        self.vq = Quantize(128, 512)
 
         self.upsample = torch.nn.ConvTranspose1d(n_cond_channels,
                                                  n_cond_channels,
@@ -100,9 +114,11 @@ class WaveNet(torch.nn.Module):
             self.skip_layers.append(skip_layer)
 
     def forward(self, forward_input):
-        features = forward_input[0]
+        features = self.encoder(forward_input[0])
         forward_input = forward_input[1]
-        cond_input = self.upsample(features)
+        cond_input = self.pre_vq_conv(features).permute(0, 2, 1)
+        cond_input_vq, vq_loss, _ = self.vq(cond_input)
+        cond_input = self.upsample(cond_input_vq.permute(0, 2, 1))
 
         assert(cond_input.size(2) >= forward_input.size(1))
         if cond_input.size(2) > forward_input.size(1):
@@ -142,7 +158,7 @@ class WaveNet(torch.nn.Module):
         first = last * 0.0
         output = torch.cat((first, output), dim=2)
 
-        return output
+        return output, vq_loss
 
     def export_weights(self):
         """

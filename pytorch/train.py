@@ -135,8 +135,8 @@ def train(num_gpus, rank, group_name, output_directory, epochs, learning_rate,
             x = to_gpu(x).float()
             y = to_gpu(y)
             x = (x, y)  # auto-regressive takes outputs as inputs
-            y_pred = model(x)
-            loss = criterion(y_pred, y)
+            y_pred, vq_loss = model(x)
+            loss = criterion(y_pred, y) + 0.25 * vq_loss
             if num_gpus > 1:
                 reduced_loss = reduce_tensor(loss.data, num_gpus)[0]
             else:
