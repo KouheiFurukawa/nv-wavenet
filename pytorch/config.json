@@ -1,6 +1,6 @@
 {
     "train_config": {
-        "output_directory": "/data/unagi0/furukawa/wn_checkpoints/dynamic_static",
+        "output_directory": "/data/unagi0/furukawa/wn_checkpoints/cpc_dynamic_static",
         "epochs": 100000,
         "learning_rate": 1e-3,
         "iters_per_checkpoint": 5000,
@@ -11,7 +11,7 @@
 
     "data_config": {
         "training_files": "musicnet_npy_10sec",
-        "segment_length": 16000,
+        "segment_length": 16384,
         "mu_quantization": 256,
         "filter_length": 800,
         "hop_length": 200,

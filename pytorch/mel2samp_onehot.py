@@ -44,6 +44,11 @@ import utils
 # We're using the audio processing from TacoTron2 to make sure it matches
 sys.path.insert(0, 'tacotron2')
 from tacotron2.layers import TacotronSTFT
+sys.path.remove('tacotron2')
+
+sys.path.insert(0, 'cpc_model')
+from cpc_model.model import audio_model
+sys.path.remove('cpc_model')
 
 class Encoder(torch.nn.Module):
     def __init__(self):
@@ -70,10 +75,11 @@ class Mel2SampOnehot(torch.utils.data.Dataset):
         self.segment_length = segment_length
         self.mu_quantization = mu_quantization
         self.sampling_rate = sampling_rate
-        self.enc = Encoder()
-        state = torch.load('/data/unagi0/furukawa/musicnet/checkpoint_0300.pth.tar')['state_dict']
-        self.enc.load_state_dict(state, strict=False)
-        self.enc.eval()
+        self.enc = audio_model()
+        state = torch.load('/data/unagi0/furukawa/cpc_logs/logs/stride_256_dim_128/best_checkpoint.tar')
+        self.enc.load_state_dict(state)
+        for p in self.enc.parameters():
+            p.requires_grad = False
 
     def get_mel(self, audio):
         audio_norm = audio.unsqueeze(0)
@@ -87,9 +93,6 @@ class Mel2SampOnehot(torch.utils.data.Dataset):
         filename = self.audio_files[index]
         audio, sampling_rate = utils.load_wav_to_torch(filename)
         audio = torch.clamp(audio, -1., 1.)
-        with torch.no_grad():
-            melspec = self.stft(audio[:81920])
-            label = self.enc.enc_static(melspec.view(1, 1, 80, -1)).squeeze()
         if sampling_rate != self.sampling_rate:
             raise ValueError("{} SR doesn't match target {} SR".format(
                 sampling_rate, self.sampling_rate))
@@ -102,9 +105,11 @@ class Mel2SampOnehot(torch.utils.data.Dataset):
         else:
             audio = torch.nn.functional.pad(audio, (0, self.segment_length - audio.size(0)), 'constant').data
 
-        audio = utils.mu_law_encode(audio, self.mu_quantization)
         with torch.no_grad():
-            mel = self.enc.enc_dynamic(audio.view(1, 1, -1).float()).squeeze()
+            mel, label = self.enc.model.get_latent_representations(audio.view(1, 1, -1).float())
+            mel = mel.squeeze().transpose(0, 1)
+            label = torch.mean(label, dim=1).squeeze()
+        audio = utils.mu_law_encode(audio, self.mu_quantization)
         return (mel, audio, label)
     
     def __len__(self):
