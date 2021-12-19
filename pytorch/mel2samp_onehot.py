@@ -102,7 +102,7 @@ class Mel2SampOnehot(torch.utils.data.Dataset):
         else:
             audio = torch.nn.functional.pad(audio, (0, self.segment_length - audio.size(0)), 'constant').data
 
-        audio = utils.mu_law_encode(audio / utils.MAX_WAV_VALUE, self.mu_quantization)
+        audio = utils.mu_law_encode(audio, self.mu_quantization)
         with torch.no_grad():
             mel = self.enc.enc_dynamic(audio.view(1, 1, -1).float()).squeeze()
         return (mel, audio, label)
