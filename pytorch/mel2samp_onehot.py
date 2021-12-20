@@ -40,6 +40,11 @@ import utils
 # We're using the audio processing from TacoTron2 to make sure it matches
 sys.path.insert(0, 'tacotron2')
 from tacotron2.layers import TacotronSTFT
+sys.path.remove('tacotron2')
+
+sys.path.insert(0, 'cpc_model')
+from cpc_model.model import audio_model
+sys.path.remove('cpc_model')
 
 class Mel2SampOnehot(torch.utils.data.Dataset):
     """
@@ -62,6 +67,11 @@ class Mel2SampOnehot(torch.utils.data.Dataset):
         self.segment_length = segment_length
         self.mu_quantization = mu_quantization
         self.sampling_rate = sampling_rate
+        self.enc = audio_model()
+        state = torch.load('/data/unagi0/furukawa/cpc_logs/logs/stride_256_dim_128/best_checkpoint.tar')
+        self.enc.load_state_dict(state)
+        for p in self.enc.parameters():
+            p.requires_grad = False
 
     def get_mel(self, audio):
         audio_norm = audio.unsqueeze(0)
@@ -87,7 +97,9 @@ class Mel2SampOnehot(torch.utils.data.Dataset):
         else:
             audio = torch.nn.functional.pad(audio, (0, self.segment_length - audio.size(0)), 'constant').data
 
-        mel = self.get_mel(audio)
+        with torch.no_grad():
+            mel, _ = self.enc.model.get_latent_representations(audio.view(1, 1, -1).float())
+            mel = mel.squeeze().transpose(0, 1)
         audio = utils.mu_law_encode(audio, self.mu_quantization)
         return (mel, audio)
     
