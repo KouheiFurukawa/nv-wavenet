@@ -88,7 +88,7 @@ class Mel2SampOnehot(torch.utils.data.Dataset):
             audio = torch.nn.functional.pad(audio, (0, self.segment_length - audio.size(0)), 'constant').data
 
         mel = self.get_mel(audio)
-        audio = utils.mu_law_encode(audio / utils.MAX_WAV_VALUE, self.mu_quantization)
+        audio = utils.mu_law_encode(audio, self.mu_quantization)
         return (mel, audio)
     
     def __len__(self):
