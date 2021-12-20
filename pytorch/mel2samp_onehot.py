@@ -73,7 +73,8 @@ class Mel2SampOnehot(torch.utils.data.Dataset):
         self.enc = Encoder()
         state = torch.load('/data/unagi0/furukawa/musicnet/checkpoint_0300.pth.tar')['state_dict']
         self.enc.load_state_dict(state, strict=False)
-        self.enc.eval()
+        for p in self.enc.parameters():
+            p.requires_grad = False
 
     def get_mel(self, audio):
         audio_norm = audio.unsqueeze(0)
