@@ -26,6 +26,7 @@
 import torch
 import wavenet
 import math
+from fairseq.models.wav2vec.wav2vec2 import ConvFeatureExtractionModel, Wav2Vec2Config
 
 class Conv(torch.nn.Module):
     """
@@ -56,6 +57,12 @@ class WaveNet(torch.nn.Module):
                  n_residual_channels, n_skip_channels, n_out_channels,
                  n_cond_channels, upsamp_window, upsamp_stride):
         super(WaveNet, self).__init__()
+        self.prenet = ConvFeatureExtractionModel(
+            conv_layers=eval(Wav2Vec2Config.conv_feature_layers),
+            dropout=0.0,
+            mode=Wav2Vec2Config.extractor_mode,
+            conv_bias=Wav2Vec2Config.conv_bias,
+        )
 
         self.upsample = torch.nn.ConvTranspose1d(n_cond_channels,
                                                  n_cond_channels,
@@ -101,6 +108,7 @@ class WaveNet(torch.nn.Module):
 
     def forward(self, forward_input):
         features = forward_input[0]
+        features = self.prenet(features)
         forward_input = forward_input[1]
         cond_input = self.upsample(features)
 

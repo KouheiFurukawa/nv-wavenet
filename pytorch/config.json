@@ -1,6 +1,6 @@
 {
     "train_config": {
-        "output_directory": "/data/unagi0/furukawa/wn_checkpoints/mel",
+        "output_directory": "/data/unagi0/furukawa/wn_checkpoints/ae",
         "epochs": 100000,
         "learning_rate": 1e-3,
         "iters_per_checkpoint": 5000,
@@ -14,7 +14,7 @@
         "segment_length": 16000,
         "mu_quantization": 256,
         "filter_length": 1024,
-        "hop_length": 256,
+        "hop_length": 320,
         "win_length": 1024,
         "sampling_rate": 16000
     },
@@ -33,6 +33,6 @@
         "n_out_channels": 256,
         "n_cond_channels": 80,
         "upsamp_window": 800,
-        "upsamp_stride": 256
+        "upsamp_stride": 320
     }
 }
