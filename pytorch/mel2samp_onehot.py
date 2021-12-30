@@ -47,9 +47,13 @@ class Mel2SampOnehot(torch.utils.data.Dataset):
     spectrogram, audio pair.
     """
     def __init__(self, training_files, segment_length, mu_quantization,
-                 filter_length, hop_length, win_length, sampling_rate):
+                 filter_length, hop_length, win_length, sampling_rate, train=True):
         audio_files = utils.files_to_list(training_files)
         self.audio_files = audio_files
+        if train:
+            self.audio_files = self.audio_files[:11000]
+        else:
+            self.audio_files = self.audio_files[11000:]
         random.seed(1234)
         random.shuffle(self.audio_files)
         

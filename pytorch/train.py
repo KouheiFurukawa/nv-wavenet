@@ -39,6 +39,7 @@ from torch.utils.data import DataLoader
 from wavenet import WaveNet
 from mel2samp_onehot import Mel2SampOnehot
 from utils import to_gpu
+from torch.utils.tensorboard import SummaryWriter
 
 class CrossEntropyLoss(torch.nn.Module):
     def __init__(self):
@@ -75,13 +76,16 @@ def save_checkpoint(model, optimizer, learning_rate, iteration, filepath):
           iteration, filepath))
     model_for_saving = WaveNet(**wavenet_config).cuda()
     model_for_saving.load_state_dict(model.state_dict())
-    torch.save({'model': model_for_saving,
+    torch.save({'model': model.state_dict(),
                 'iteration': iteration,
                 'optimizer': optimizer.state_dict(),
                 'learning_rate': learning_rate}, filepath)
 
 def train(num_gpus, rank, group_name, output_directory, epochs, learning_rate,
           iters_per_checkpoint, batch_size, seed, checkpoint_path):
+    tb_dir = os.path.join(output_directory, 'tensorboard')
+    os.makedirs(tb_dir, exist_ok=True)
+    writer = SummaryWriter(log_dir=tb_dir)
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
     #=====START: ADDED FOR DISTRIBUTED======
@@ -101,12 +105,14 @@ def train(num_gpus, rank, group_name, output_directory, epochs, learning_rate,
 
     # Load checkpoint if one exists
     iteration = 0
+    eval_iteration = 0
     if checkpoint_path != "":
         model, optimizer, iteration = load_checkpoint(checkpoint_path, model,
                                                       optimizer)
         iteration += 1  # next iteration is iteration + 1
 
-    trainset = Mel2SampOnehot(**data_config)
+    trainset = Mel2SampOnehot(**data_config, train=True)
+    evalset = Mel2SampOnehot(**data_config, train=False)
     # =====START: ADDED FOR DISTRIBUTED======
     train_sampler = DistributedSampler(trainset) if num_gpus > 1 else None
     # =====END:   ADDED FOR DISTRIBUTED======
@@ -115,6 +121,11 @@ def train(num_gpus, rank, group_name, output_directory, epochs, learning_rate,
                               batch_size=batch_size,
                               pin_memory=False,
                               drop_last=True)
+    eval_loader = DataLoader(evalset, num_workers=1, shuffle=False,
+                             sampler=train_sampler,
+                             batch_size=batch_size,
+                             pin_memory=False,
+                             drop_last=True)
 
     # Get shared output_directory ready
     if rank == 0:
@@ -157,6 +168,23 @@ def train(num_gpus, rank, group_name, output_directory, epochs, learning_rate,
                                     checkpoint_path)
                      
             iteration += 1
+
+        for i, batch in enumerate(eval_loader):
+            model.eval()
+            x, y = batch
+            x = to_gpu(x).float()
+            y = to_gpu(y)
+            x = (x, y)  # auto-regressive takes outputs as inputs
+            y_pred = model(x)
+            loss = criterion(y_pred, y)
+            if num_gpus > 1:
+                reduced_loss = reduce_tensor(loss.data, num_gpus)[0]
+            else:
+                reduced_loss = loss.data
+            print("{}(eval):\t{:.9f}".format(eval_iteration, reduced_loss))
+            if eval_iteration % 50 == 0:
+                writer.add_scalar('eval', reduced_loss, eval_iteration)
+            eval_iteration += 1
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
