@@ -10,8 +10,8 @@
     },
 
     "data_config": {
-        "training_files": "musicnet_npy_10sec",
-        "segment_length": 16000,
+        "training_files": "musicnet_wav_10sec",
+        "segment_length": 16384,
         "mu_quantization": 256,
         "filter_length": 1024,
         "hop_length": 256,

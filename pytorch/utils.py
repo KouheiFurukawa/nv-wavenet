@@ -35,14 +35,14 @@ def load_wav_to_torch(full_path):
     """
     Loads wavdata into torch array
     """
-    sampling_rate, data = 16000, np.load(full_path)
+    sampling_rate, data = read(full_path)
     return torch.FloatTensor(data.astype(np.float32)), sampling_rate
 
 def files_to_list(filename):
     """
     Takes a text file of filenames and makes a list of filenames
     """
-    files = sorted(glob('/data/uni0/users/furukawa/' + filename + '/*'))
+    files = sorted(glob('/data/unagi0/furukawa/' + filename + '/*/*.wav'))
     return files
 
 def load_filepaths_and_text(filename, split="|"):

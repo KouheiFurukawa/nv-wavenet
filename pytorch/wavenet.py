@@ -24,6 +24,7 @@
 # 
 # *****************************************************************************
 import torch
+import torch.nn.functional as F
 import wavenet
 import math
 from fairseq.models.wav2vec.wav2vec2 import ConvFeatureExtractionModel, Wav2Vec2Config
@@ -75,6 +76,7 @@ class WaveNet(torch.nn.Module):
         self.n_out_channels = n_out_channels
         self.cond_layers = Conv(n_cond_channels, 2*n_residual_channels*n_layers,
                                 w_init_gain='tanh')
+        self.global_layers = Conv(n_cond_channels, 2*n_residual_channels*n_layers)
         self.dilate_layers = torch.nn.ModuleList()
         self.res_layers = torch.nn.ModuleList()
         self.skip_layers = torch.nn.ModuleList()
@@ -85,6 +87,8 @@ class WaveNet(torch.nn.Module):
                                  bias=False, w_init_gain='relu')
         self.conv_end = Conv(n_out_channels, n_out_channels,
                                  bias=False, w_init_gain='linear')
+        self.bn_g = torch.nn.BatchNorm1d(2048)
+        self.bn_l = torch.nn.BatchNorm1d(2048)
 
         loop_factor = math.floor(math.log2(max_dilation)) + 1
         for i in range(n_layers):
@@ -107,23 +111,30 @@ class WaveNet(torch.nn.Module):
             self.skip_layers.append(skip_layer)
 
     def forward(self, forward_input):
-        features = forward_input[0]
+        features = forward_input[1]
         features = self.prenet(features)
+        global_input = forward_input[0]
         forward_input = forward_input[1]
         cond_input = self.upsample(features)
+        global_input = global_input.transpose(1, 2).expand(-1, -1, cond_input.size(-1))
 
         assert(cond_input.size(2) >= forward_input.size(1))
         if cond_input.size(2) > forward_input.size(1):
             cond_input = cond_input[:, :, :forward_input.size(1)]
+            global_input = global_input[:, :, :forward_input.size(1)]
        
         forward_input = self.embed(forward_input.long())
         forward_input = forward_input.transpose(1, 2)
        
         cond_acts = self.cond_layers(cond_input)
+        cond_acts = F.relu(self.bn_l(cond_acts))
         cond_acts = cond_acts.view(cond_acts.size(0), self.n_layers, -1, cond_acts.size(2))
+        global_input = self.global_layers(global_input)
+        global_input = F.relu(self.bn_g(global_input))
+        global_input = global_input.view(global_input.size(0), self.n_layers, -1, global_input.size(2))
         for i in range(self.n_layers):
             in_act = self.dilate_layers[i](forward_input)
-            in_act = in_act + cond_acts[:,i,:,:]
+            in_act = in_act + cond_acts[:,i,:,:] + global_input[:,i,:,:]
             t_act = torch.nn.functional.tanh(in_act[:, :self.n_residual_channels, :])
             s_act = torch.nn.functional.sigmoid(in_act[:, self.n_residual_channels:, :])
             acts = t_act * s_act
