@@ -1,3 +1,6 @@
 [submodule "pytorch/tacotron2"]
 	path = pytorch/tacotron2
 	url = https://github.com/NVIDIA/tacotron2
+[submodule "pytorch/mine_pytorch"]
+	path = pytorch/mine_pytorch
+	url = git@github.com:KouheiFurukawa/mine-pytorch.git
