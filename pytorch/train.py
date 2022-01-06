@@ -29,6 +29,7 @@ import json
 import os
 import time
 import torch
+import sys
 
 #=====START: ADDED FOR DISTRIBUTED======
 from distributed import init_distributed, apply_gradient_allreduce, reduce_tensor
@@ -40,6 +41,9 @@ from wavenet import WaveNet
 from mel2samp_onehot import Mel2SampOnehot
 from utils import to_gpu
 from torch.utils.tensorboard import SummaryWriter
+sys.path.insert(0, 'mine_pytorch')
+from mine_pytorch.mine.models.information_bottleneck import StatisticsNetwork
+from mine_pytorch.mine.models.mine import Mine
 
 class CrossEntropyLoss(torch.nn.Module):
     def __init__(self):
@@ -95,6 +99,8 @@ def train(num_gpus, rank, group_name, output_directory, epochs, learning_rate,
     
     criterion = CrossEntropyLoss()
     model = WaveNet(**wavenet_config).cuda()
+    t = StatisticsNetwork(128, 128, 'cuda')
+    mine = Mine(t).cuda()
 
     #=====START: ADDED FOR DISTRIBUTED======
     if num_gpus > 1:
@@ -102,6 +108,7 @@ def train(num_gpus, rank, group_name, output_directory, epochs, learning_rate,
     #=====END:   ADDED FOR DISTRIBUTED======
 
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+    optimizer_mi = torch.optim.Adam(mine.parameters(), lr=learning_rate)
 
     # Load checkpoint if one exists
     iteration = 0
@@ -135,23 +142,33 @@ def train(num_gpus, rank, group_name, output_directory, epochs, learning_rate,
         print("output directory", output_directory)
     logfile = os.path.join(output_directory, 'log.txt')
     model.train()
+    mine.train()
     epoch_offset = max(0, int(iteration / len(train_loader)))
     # ================ MAIN TRAINNIG LOOP! ===================
     for epoch in range(epoch_offset, epochs):
         print("Epoch: {}".format(epoch))
         for i, batch in enumerate(train_loader):
-            model.zero_grad()
-            
-            x, y = batch
+            mine.zero_grad()
+            x, y, x_ = batch
             x = to_gpu(x)
             y = to_gpu(y)
+            x_ = to_gpu(x_)
+
+            z = model.prenet(y.float()).transpose(1, 2).contiguous()
+            mi_sup = mine(z.view(-1, 128).detach(), x_.view(-1, 128))
+            mi_sup.backward()
+            optimizer_mi.step()
+
+            model.zero_grad()
             x = (x, y.float())  # auto-regressive takes outputs as inputs
             y_pred = model(x)
+            mi = mine.mi(z.view(-1, 128), x_.view(-1, 128))
             loss = criterion(y_pred, y)
             if num_gpus > 1:
                 reduced_loss = reduce_tensor(loss.data, num_gpus)[0]
             else:
                 reduced_loss = loss.data
+            loss = loss + mi
             loss.backward()
             optimizer.step()
 
@@ -171,11 +188,15 @@ def train(num_gpus, rank, group_name, output_directory, epochs, learning_rate,
 
         for i, batch in enumerate(eval_loader):
             model.eval()
-            x, y = batch
+            x, y, x_ = batch
             x = to_gpu(x)
             y = to_gpu(y)
+            x_ = to_gpu(x_)
             x = (x, y.float())  # auto-regressive takes outputs as inputs
-            y_pred = model(x)
+            with torch.no_grad():
+                z = model.prenet(y.float()).transpose(1, 2).contiguous()
+                y_pred = model(x)
+                mi = mine.mi(z.view(-1, 128), x_.view(-1, 128))
             loss = criterion(y_pred, y)
             if num_gpus > 1:
                 reduced_loss = reduce_tensor(loss.data, num_gpus)[0]
@@ -184,6 +205,7 @@ def train(num_gpus, rank, group_name, output_directory, epochs, learning_rate,
             print("{}(eval):\t{:.9f}".format(eval_iteration, reduced_loss))
             if eval_iteration % 50 == 0:
                 writer.add_scalar('eval', reduced_loss, eval_iteration)
+                writer.add_scalar('mi', mi.data, eval_iteration)
             eval_iteration += 1
 
 if __name__ == "__main__":
