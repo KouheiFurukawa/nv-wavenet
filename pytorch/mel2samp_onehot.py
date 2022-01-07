@@ -58,9 +58,13 @@ class Mel2SampOnehot(torch.utils.data.Dataset):
     spectrogram, audio pair.
     """
     def __init__(self, training_files, segment_length, mu_quantization,
-                 filter_length, hop_length, win_length, sampling_rate):
+                 filter_length, hop_length, win_length, sampling_rate, train=True):
         audio_files = utils.files_to_list(training_files)
         self.audio_files = audio_files
+        if train:
+            self.audio_files = self.audio_files[:11000]
+        else:
+            self.audio_files = self.audio_files[11000:]
         random.seed(1234)
         random.shuffle(self.audio_files)
         
@@ -70,11 +74,6 @@ class Mel2SampOnehot(torch.utils.data.Dataset):
         self.segment_length = segment_length
         self.mu_quantization = mu_quantization
         self.sampling_rate = sampling_rate
-        self.enc = Encoder()
-        state = torch.load('/data/unagi0/furukawa/musicnet/checkpoint_0300.pth.tar')['state_dict']
-        self.enc.load_state_dict(state, strict=False)
-        for p in self.enc.parameters():
-            p.requires_grad = False
 
     def get_mel(self, audio):
         audio_norm = audio.unsqueeze(0)
@@ -88,9 +87,7 @@ class Mel2SampOnehot(torch.utils.data.Dataset):
         filename = self.audio_files[index]
         audio, sampling_rate = utils.load_wav_to_torch(filename)
         audio = torch.clamp(audio, -1., 1.)
-        with torch.no_grad():
-            melspec = self.stft(audio[:81920])
-            label = self.enc.enc_static(melspec.view(1, 1, 80, -1)).squeeze()
+        mel = self.stft(audio[:81920])
         if sampling_rate != self.sampling_rate:
             raise ValueError("{} SR doesn't match target {} SR".format(
                 sampling_rate, self.sampling_rate))
@@ -104,9 +101,7 @@ class Mel2SampOnehot(torch.utils.data.Dataset):
             audio = torch.nn.functional.pad(audio, (0, self.segment_length - audio.size(0)), 'constant').data
 
         audio = utils.mu_law_encode(audio, self.mu_quantization)
-        with torch.no_grad():
-            mel = self.enc.enc_dynamic(audio.view(1, 1, -1).float()).squeeze()
-        return (mel, audio, label)
+        return (mel, audio)
     
     def __len__(self):
         return len(self.audio_files)

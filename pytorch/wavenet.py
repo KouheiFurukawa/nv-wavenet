@@ -24,8 +24,11 @@
 # 
 # *****************************************************************************
 import torch
+import torch.nn.functional as F
 import wavenet
 import math
+
+from mel2samp_onehot import Encoder
 
 class Conv(torch.nn.Module):
     """
@@ -56,6 +59,7 @@ class WaveNet(torch.nn.Module):
                  n_residual_channels, n_skip_channels, n_out_channels,
                  n_cond_channels, upsamp_window, upsamp_stride):
         super(WaveNet, self).__init__()
+        self.enc = Encoder()
 
         self.upsample = torch.nn.ConvTranspose1d(n_cond_channels,
                                                  n_cond_channels,
@@ -80,6 +84,8 @@ class WaveNet(torch.nn.Module):
                                  bias=False, w_init_gain='relu')
         self.conv_end = Conv(n_out_channels, n_out_channels,
                                  bias=False, w_init_gain='linear')
+        self.bn_g = torch.nn.BatchNorm1d(2048)
+        self.bn_l = torch.nn.BatchNorm1d(2048)
 
         loop_factor = math.floor(math.log2(max_dilation)) + 1
         for i in range(n_layers):
@@ -102,9 +108,11 @@ class WaveNet(torch.nn.Module):
             self.skip_layers.append(skip_layer)
 
     def forward(self, forward_input):
-        features = forward_input[0]
-        label = forward_input[2]
+        mel = forward_input[0]
         forward_input = forward_input[1]
+        with torch.no_grad():
+            label = self.enc.enc_static(mel.unsqueeze(1))
+            features = self.enc.enc_dynamic(forward_input.unsqueeze(1))
         cond_input = self.upsample(features)
         global_input = self.g_embed(label).unsqueeze(-1)
         global_input = global_input.expand(-1, -1, cond_input.size(-1))
@@ -118,8 +126,10 @@ class WaveNet(torch.nn.Module):
         forward_input = forward_input.transpose(1, 2)
        
         cond_acts = self.cond_layers(cond_input)
+        cond_acts = F.relu(self.bn_l(cond_acts))
         cond_acts = cond_acts.view(cond_acts.size(0), self.n_layers, -1, cond_acts.size(2))
         global_input = self.global_layers(global_input)
+        global_input = F.relu(self.bn_g(global_input))
         global_input = global_input.view(global_input.size(0), self.n_layers, -1, global_input.size(2))
         for i in range(self.n_layers):
             in_act = self.dilate_layers[i](forward_input)
